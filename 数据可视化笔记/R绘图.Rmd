@@ -1,0 +1,466 @@
+---
+title: "Plot using R"
+author: "Gao Zhen"
+date: "8/19/2021"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+## plot
+
+```{r point}
+ set.seed(1234)
+ x<-sample(1:100,80,replace = FALSE)
+ y<-2*x+20+rnorm(80,0,10)
+ plot(x,y,ylim=c(0,300))
+```
+```{r line-1}
+ t <- 1:50
+ set.seed(1234)
+ v<-rnorm(50,0,10)
+ plot(t,v,type="l")
+```
+
+```{r line-2}
+ set.seed(1234)
+ x<-sample(1:100,80,replace = FALSE)
+ y<-2*x+20+rnorm(80,0,10)
+ model <- lm(y~x) 
+ plot(x,y)             
+ abline(model,col="blue")
+```
+
+```{r pie}
+year<-2001:2010
+set.seed(1234)
+counts <- sample(100:500,10)
+lb <-paste(year,counts,sep=":") 
+pie(counts,labels=lb)    
+```
+
+
+```{r barplot}
+barplot(counts,names.arg=year,col = rainbow(10))
+```
+
+```{r hist}
+set.seed(1234)
+x<-rnorm(100,0,1)
+hist(x)
+```
+
+```{r hist-1}
+      hist(x,breaks = 10,freq=FALSE,col = "gray")
+      lines(density(x),col="red",lwd=2)
+```
+
+```{r hist-2}
+      h <- hist(x,breaks=10,freq=FALSE,col="gray")
+      xfit<-seq(min(x),max(x),length=100)
+      yfit<-dnorm(xfit,mean = mean(x),sd=sd(x))
+      lines(xfit,yfit,col="blue",lwd=2)
+```
+  
+```{r boxplot-1}
+  boxplot(counts)
+```    
+
+```{r boxplot-2}
+  boxplot(iris$Sepal.Length~iris$Species)
+```  
+```{r function-1}
+  curve(x^3-5*x,from=-4,to=4)
+```  
+
+```{r function-2}
+  myfun=function(xvar){
+    1/(1+exp(-xvar+10))
+  }
+  curve(myfun(x),from=0,to=20)
+  curve(1-myfun(x),add=TRUE,col="red")
+```  
+```{r layout}
+  par(mfrow=c(2,2))
+  plot(rnorm(100,0,1))
+  plot(rnorm(100,0,1),type="l")
+  hist(rnorm(100,0,1))
+  boxplot(rnorm(100,0,1))
+```
+
+## ggplot
+
+```{r NA}
+	x<-c(1,2,3,NA,4);
+  mean(x)
+	mean(x,na.rm=T)
+```  
+
+
+```{r ggplot-1}
+ library(ggplot2)
+ p <- ggplot(data=mpg, mapping=aes(x=cty, y=hwy))     
+ p + geom_point() 
+```  
+
+```{r ggplot-2}
+  library(ggplot2)
+  p<-ggplot(mpg, aes(x=cty, y=hwy, color=factor(year)))
+  p + geom_point()
+``` 
+
+```{r ggplot-3}
+  p <- ggplot(mpg, aes(x=cty, y=hwy,color=factor(year),
+size=displ))
+  p + geom_point()
+``` 
+
+
+```{r ggplot-4}
+  p <- ggplot(data=mpg, mapping=aes(x=cty, y=hwy))
+  p <- p + geom_point(aes(colour=factor(year),size=displ))
+  p <- p + stat_smooth()
+  p + scale_color_manual(values =c('blue2','red4'))  
+``` 
+
+
+```{r ggplot-5}
+  p <- ggplot(data=mpg, mapping=aes(x=cty, y=hwy))
+  p <- p + stat_smooth()
+  p <- p + geom_point(aes(colour=factor(year),size=displ))
+  p <- p + scale_size_continuous(range = c(4, 10))  
+  p + facet_wrap(~ year, ncol=1)     
+``` 
+
+```{r ggplot-point-1}
+  library(gcookbook)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn,shape=sex,color=sex)) +
+    geom_point()+
+    scale_shape_manual(values=c(1,2))+
+    scale_color_brewer(palette="Set1")
+```
+```{r ggplot-point-2}
+  library(gcookbook)
+  hw=heightweight
+  hw$weightGroup=cut(hw$weightLb,breaks=c(-Inf,100,Inf),labels=c("<100",">100"))
+  ggplot(hw,aes(x=ageYear,y=heightIn,shape=sex,fill=weightGroup)) +
+    geom_point(size=2.5)+
+    scale_shape_manual(values=c(21,24))+
+    scale_fill_manual(values=c("red","black"),guide=guide_legend(override.aes = list(shape=c(21))))
+```
+```{r ggplot-point-3}
+  library(gcookbook)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn,color=weightLb)) +
+    geom_point()
+```
+
+```{r ggplot-point-4}
+  library(gcookbook)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn,fill=weightLb)) +
+    geom_point(shape=21,size=2.5)+
+    scale_fill_gradient(low="black",high="white",breaks=seq(70,170,by=20),guide=guide_legend())
+```
+
+```{r ggplot-line-1}
+  library(gcookbook)
+  ggplot(worldpop,aes(x=Year,y=Population)) + geom_line() + geom_point()
+```
+```{r ggplot-line-2}
+  library(plyr)
+  tg=ddply(ToothGrowth,c("supp","dose"),summarise,length=mean(len))
+  ggplot(tg,aes(x=dose,y=length,linetype=supp)) + geom_line() 
+```
+```{r ggplot-line-3}
+  library(plyr)
+  tg=ddply(ToothGrowth,c("supp","dose"),summarise,length=mean(len))
+  ggplot(tg,aes(x=dose,y=length,color=supp)) + geom_line() 
+```
+```{r ggplot-line-4}
+  library(gcookbook)
+  clim=subset(climate,Source=="Berkeley",select=c("Year","Anomaly10y","Unc10y"))
+  ggplot(clim,aes(x=Year,y=Anomaly10y))+
+    geom_ribbon(aes(ymin=Anomaly10y-Unc10y,ymax=Anomaly10y+Unc10y),alpha=0.2)+
+    geom_line()
+```
+
+```{r ggplot-line-5}
+  library(gcookbook)
+  clim=subset(climate,Source=="Berkeley",select=c("Year","Anomaly10y","Unc10y"))
+  ggplot(clim,aes(x=Year,y=Anomaly10y))+
+    geom_line(aes(y=Anomaly10y-Unc10y),color="grey50",linetype="dotted")+
+    geom_line(aes(y=Anomaly10y+Unc10y),color="grey50",linetype="dotted")+
+    geom_line()
+```
+
+```{r ggplot-regression-1}
+  library(gcookbook)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn)) +
+    geom_point()+
+    stat_smooth(method=lm)
+```
+
+```{r ggplot-regression-2}
+  library(gcookbook)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn)) +
+    geom_point()+
+    stat_smooth(method=loess)
+```
+
+```{r ggplot-regression-3}
+  library(MASS)
+  b=biopsy
+  b$classn[b$class=="benign"]=0
+  b$classn[b$class=="malignant"]=1
+  ggplot(b,aes(x=V1,y=classn)) +
+    geom_point(position=position_jitter(width=0.3,height=0.06),
+               alpha=0.4,shape=21,size=1.5)+
+    stat_smooth(method="glm",method.args = list(family = "binomial"))
+```
+
+```{r ggplot-annotate-1}
+  library(gcookbook)
+  model=lm(heightIn~ageYear,heightweight)
+  #summary(model)
+  pred=predict(model,heightweight)
+  ggplot(heightweight,aes(x=ageYear,y=heightIn)) +
+    geom_point()+
+    geom_line(data=data.frame(ageYear=heightweight$ageYear,heightIn=pred))+
+    annotate("text",label="R^2=0.42",x=16.5,y=52)
+```
+```{r ggplot-annotate-2}
+  library(gcookbook)
+  ctr=subset(countries,year==2009 & healthexp>2000)
+  ggplot(ctr,aes(x=healthexp,y=infmortality)) +
+    geom_point()+
+    geom_text(aes(x=healthexp+300,label=Name),size=2,vjust=0)
+```
+
+
+```{r area-1}
+  sunspotyear=data.frame(year=as.numeric(time(sunspot.year)),
+                        sunspots=as.numeric(sunspot.year))
+  ggplot(sunspotyear,aes(x=year,y=sunspots))+geom_area()
+```
+```{r area-2}
+  sunspotyear=data.frame(year=as.numeric(time(sunspot.year)),
+                        sunspots=as.numeric(sunspot.year))
+  ggplot(sunspotyear,aes(x=year,y=sunspots))+
+    geom_area(color="black",fill="blue",alpha=0.2)
+```
+```{r area-3}
+  library(gcookbook)
+  ggplot(uspopage,aes(x=Year,y=Thousands,fill=AgeGroup))+geom_area()
+```
+```{r area-4}
+  library(gcookbook)
+  ggplot(uspopage,aes(x=Year,y=Thousands,fill=AgeGroup,order=desc(AgeGroup)))+
+    geom_area(color=NA,alpha=0.4)+
+    scale_fill_brewer(palette="Blues")+
+    geom_line(position="stack",size=0.2)
+```
+
+```{r ggplot-7}
+ class2 <- mpg$class                       
+ class2 <- reorder(class2,class2,length)   
+ mpg$class2  <-  class2                  
+ p  <-  ggplot(mpg, aes(x=class2))        
+ p  +  geom_bar(aes(fill=class2))    
+```
+```{r ggplot-8}
+   p <- ggplot(mpg, aes(class2,fill=factor(year)))   
+   p  + geom_bar(position='identity',alpha=0.5)  
+```
+```{r ggplot-9}
+  p <- ggplot(mpg, aes(class2,fill=factor(year))) 
+	p  + geom_bar(position='dodge',alpha=0.5)   #
+```
+```{r ggplot-10}
+  p <- ggplot(mpg, aes(class2,fill=factor(year)))   
+	p  + geom_bar(position='stack',alpha=0.5)  
+```
+```{r ggplot-11}
+  p <- ggplot(mpg, aes(class2,fill=factor(year))) 
+  p  + geom_bar(position='fill',alpha=0.5)  
+```
+```{r add-text-1}
+  library(gcookbook)
+  ggplot(cabbage_exp,aes(x=interaction(Date,Cultivar),y=Weight))+geom_bar(stat="identity")+geom_text(aes(label=Weight),vjust=1.5,color="white")
+  ggplot(cabbage_exp,aes(x=interaction(Date,Cultivar),y=Weight))+geom_bar(stat="identity")+geom_text(aes(label=Weight),vjust=-0.2)
+```
+```{r add-text-2}
+  ggplot(cabbage_exp,aes(x=interaction(Date,Cultivar),y=Weight))+geom_bar(stat="identity")+geom_text(aes(label=Weight),vjust=-0.2)
+```
+
+```{r plot-order-1}
+x <- c(1.9, 4.0, 4.4, 7.2, 3.8, 8.3, 8.7, 5.4, 8.8)
+y<- c(8, 33, 42.6, 138.1, 28.1, 199.5, 222.3, 66.8, 229.7)
+plot(x,y,type='l')
+```
+
+```{r plot-order-2}
+order(x)
+``` 
+```{r plot-order-3}
+  plot(x[order(x)],y[order(x)],type='l')
+  text(x,y,1:9)
+``` 
+```{r geom_boxplot-1}
+  ggplot(ToothGrowth,aes(x=supp,y=len))+geom_boxplot()
+```
+
+```{r geom_boxplot-2}
+  ggplot(ToothGrowth,aes(x=interaction(supp,dose),y=len))+geom_boxplot()
+```
+```{r ggplot-hist-1}
+  ggplot(faithful,aes(x=waiting))+
+           geom_histogram()
+```
+
+```{r ggplot-hist-2}
+  ggplot(faithful,aes(x=waiting))+
+           geom_histogram(binwidth = 2,fill="white",color="black")
+```
+```{r ggplot-hist-3}
+  library(MASS)
+  ggplot(birthwt,aes(x=bwt))+
+    geom_histogram(fill="white",color="black")+
+    facet_grid(smoke~.)
+```
+```{r ggplot-hist-4}
+  library(MASS)
+  birthwt1=birthwt
+  birthwt1$smoke=factor(birthwt1$smoke)
+  ggplot(birthwt1,aes(x=bwt,fill=smoke))+
+    geom_histogram(position="identity",alpha=0.4)
+```
+
+```{r stat-function}
+  ggplot(data.frame(x=c(0,20)),aes(x=x))+ stat_function(fun=myfun,geom="line")
+```
+
+```{r density-1}
+  ggplot(faithful,aes(x=waiting))+ 
+  geom_density()
+```
+
+```{r density-2}
+  ggplot(faithful,aes(x=waiting))+
+    geom_line(stat="density",adjust=0.25,color="red")+
+    geom_line(stat="density")+
+    geom_line(stat="density",adjust=2,color="blue")
+```
+
+```{r density-3}
+  ggplot(faithful,aes(x=waiting,y=..density..))+
+    geom_histogram(fill="cornsilk",color="grey60",size=0.2)+
+    geom_density()+
+    xlim(35,105)
+```
+```{r density-4}
+  library(MASS)
+  birthwt1=birthwt
+  birthwt1$smoke=factor(birthwt1$smoke)
+  ggplot(birthwt1,aes(x=bwt,fill=smoke))+
+    geom_density(alpha=0.3)
+```
+
+```{r density-5}
+  ggplot(faithful,aes(x=eruptions,y=waiting))+
+  geom_point()+
+  stat_density2d()
+```
+
+```{r density-6}
+  ggplot(faithful,aes(x=eruptions,y=waiting))+
+  stat_density2d(aes(color=..level..))
+```
+
+```{r add-line-1}
+  ggplot(heightweight,aes(x=ageYear,y=heightIn,col=sex))+
+  geom_point()+
+  geom_hline(yintercept=60)+
+  geom_vline(xintercept=14)+
+  geom_abline(intercept=37.4,slope=1.75)
+```
+
+```{r others}
+  ggplot(PlantGrowth,aes(x=group,y=weight))+geom_boxplot()+
+  scale_x_discrete(labels=c("control","treatment 1","treatment 2"))+
+  theme(axis.text.x = element_text(angle=30,hjust=1,vjust=1))
+```
+```{r date-1}
+  ggplot(economics,aes(x=date,y=psavert))+geom_line()
+```
+
+```{r date-2}
+  ec=subset(economics,date>=as.Date("1992-05-01") & date<as.Date("1993-06-01"))
+  datebreaks=seq(as.Date("1992-05-01"),as.Date("1993-06-01"),by="2 month")
+  ggplot(ec,aes(x=date,y=psavert))+geom_line()+
+    scale_x_date(breaks=datebreaks,date_labels="%Y %b")+
+    theme(axis.text.x=element_text(angle=30,hjust=1))
+```
+
+
+```{r legend-1}
+  ggplot(PlantGrowth,aes(x=group,y=weight,fill=group))+geom_boxplot()+
+  scale_fill_brewer(palette="Pastel2")+
+  theme(legend.position = "top")
+```
+```{r legend-2}
+  ggplot(PlantGrowth,aes(x=group,y=weight,fill=group))+geom_boxplot()+
+  scale_fill_brewer(palette="Pastel2")+
+  theme(legend.position =c(1,0),legend.justification = c(1,0))
+```
+```{r legend-3}
+  ggplot(PlantGrowth,aes(x=group,y=weight,fill=group))+geom_boxplot()+
+  scale_fill_discrete(labels=c("control","type 1\ntreatment","type 2\ntreatment"))
+```
+
+```{r example-1}
+  require(grDevices)
+  x <- y <- seq(-4*pi, 4*pi, len = 27) 
+  r <- sqrt(outer(x^2, y^2, "+")) 
+  image(z = z <- cos(r^2)*exp(-r/6), col= gray((0:32)/32))
+```
+```{r example-2}
+  image(z, axes = FALSE, main = "Math quilt", xlab = expression(cos(r^2) * e^{-r/6}))
+  contour(z, add = TRUE, drawlabels = FALSE)
+```
+
+```{r sample}
+  set.seed(1234)
+  data=data.frame(c1=c(1:10),c2=c(11:20))
+  k=nrow(data)
+  idx=sample(k,round(0.8*k))
+  train=data[idx,]
+  (test=data[-idx,])
+
+```
+  
+```{r multipage} 
+  library(ggplot2) 
+  library(gridExtra)
+  d <-data.frame(x=rnorm(10000,0,1)) 
+  g=list()
+  g[[1]]=ggplot(d, aes(x)) + geom_histogram(binwidth =0.5)
+  g[[2]]=ggplot(d, aes(x)) + geom_histogram(aes(y=..density..),binwidth =0.5)
+  g[[3]]=ggplot(d, aes(x)) + geom_histogram(aes(y=..density..),binwidth =0.5,color="red")
+  g[[4]]=ggplot(d, aes(x)) + geom_histogram(aes(y=..density..),binwidth =0.5,color="red",fill="blue")
+  grid.arrange(grobs=g,ncol = 2)
+  #mg=marrangeGrob(g, nrow=2, ncol=2)
+  #ggsave("multipage.pdf", mg)
+  #dev.off()
+```
+  
+  
+```{r pairs} 
+  library(gcookbook)
+  c2009=subset(countries,Year==2009,select=c(Name,GDP,laborrate,healthexp,infmortality))
+  pairs(c2009[,2:5])
+```
+```{r save-1} 
+  pdf("plot1.pdf",width=4,height=4)
+  plot(mpg~wt,data=mtcars)
+  print(ggplot(mtcars,aes(x=wt,y=mpg))+geom_point())
+  dev.off()
+```
