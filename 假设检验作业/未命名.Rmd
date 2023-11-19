@@ -7,7 +7,6 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
-**步骤一 **
 导入数据：
 ```{r}
 # 加载Hypothesis_pirates.RData文件中的数据
@@ -17,7 +16,7 @@ str(bp.survey)
 # 显示数据
 bp.survey
 ```
-**步骤 1:**
+## 步骤 1:
 对海盗⾝体穿孔数⽬（按照美国，欧洲进⾏分组）进⾏箱线图绘图，解读图，阐述美国
 和欧洲是否有差异？
 ```{r}
@@ -33,6 +32,7 @@ ggplot(bp.survey, aes(x = group, y = bp)) +
   ylab("Body Piercing Count") +
   ggtitle("Body Piercing Count of American and European Pirates")
 ```
+对箱线图进行进一步分析，分别计算出箱线图上美国和欧洲的海盗身体打洞数据的**最小值、下四分位数、中位数、上四分位数和最大值。**
 ```{r}
 american<-subset(bp.survey,group=='American')
 american<-american.bp
@@ -48,10 +48,7 @@ y$out
 
 european<-subset(bp.survey,group=='European')
 european<-european.bp
-european
 x<-boxplot.stats(european,coef=1.5,do.conf=TRUE,do.out=TRUE)
-x$stats
-
 cat("欧洲海盗身体穿孔数目最小值：",x$stats[1],'\n')
 cat("欧洲海盗身体穿孔数目下四分位数：", x$stats[2],'\n')
 cat("欧洲海盗身体穿孔数目中位数：", x$stats[3],'\n')
@@ -59,6 +56,44 @@ cat("欧洲海盗身体穿孔数目上四分位数：", x$stats[4],'\n')
 cat("欧洲海盗身体穿孔数目最大值：", x$stats[5],'\n')
 x$out
 ```
+通过箱线图以及计算，我们可以发现美国海盗普遍不如欧洲海盗更喜欢穿孔，因为欧洲海盗的穿孔平均值，中位数，最小值以及最大值都比美国海盗更高；同时欧洲海盗的数据分布更加集中。
+
+## 步骤二：
+使⽤ t 检验（t-test）判断美国和欧洲海盗⾝上穿孔数⽬是否有差异，零假设是没有差
+异，备择假设是有差异，请将 t-test 结果保存在 R 变量 p.test 中，查看 p.test 对象内容，依
+据对象内容来回答 “美国和欧洲海盗⾝上穿孔数⽬是否有差异”这个问题。
+```{r}
+# 提取美国海盗和欧洲海盗的身体穿孔数据
+american <- subset(bp.survey, group == 'American')$bp
+european <- subset(bp.survey, group == 'European')$bp
+# 执行 t 检验
+p.test <- t.test(american, european)
+# 查看 p.test 对象内容
+print(p.test)
+```
+根据 t 检验的结果，p 值为 0.0214，小于显著性水平 0.05。因此，有足够的证据拒绝零假设，即可以认为美国和欧洲海盗身上穿孔数目存在差异。该结果表明，在样本中，美国海盗的平均穿孔数目为 3.7，而欧洲海盗的平均穿孔数目为 5.3。置信区间为 [-2.9335927, -0.2664073]。
+综上所述，根据 t 检验的结果，可以得出结论：**美国和欧洲海盗身上的穿孔数目存在差异**。
+
+##步骤三
+使⽤ t 检验（t-test）判断 29 岁和 30 岁海盗的⽂⾝情况是否有差异，零假设是没有差
+异，备择假设是有差异，请将 t-test 结果保存在 R 变量 t.test 中，查看 t.test 对象内容，依
+据对象内容来回答 “29 岁和 30 岁海盗的⽂⾝情况是否有差异”这个问题。
+```{r}
+# 29岁和30岁海盗的纹身情况数据分别保存在 age_29 和 age_30 中
+age_29<-subset(pirates,pirates$age==29)$tattoos
+age_30<-subset(pirates,pirates$age==30)$tattoos
+# 执行 t 检验
+t.test.result <- t.test(age_29, age_30)
+
+# 查看 t.test 对象内容
+print(t.test.result)
+
+```
+根据 t 检验的结果，p 值为 0.7911，远远大于通常设定的显著性水平 0.05。因此，根据统计检验结果，我们没有足够的证据拒绝零假设，即认为 29 岁和 30 岁海盗的纹身情况在样本中没有显著差异。
+具体来说，30 岁海盗的平均纹身状况评分为 9.92，而29岁海盗的平均纹身状况为10.08。置信区间为 [-1.058586, 1.386455]。
+**综上所述：**根据 t 检验的结果，可以得出结论：29 岁和 30 岁海盗的纹身情况在样本中没有表现出显著差异。
+
+## 步骤四
 
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
