@@ -7,27 +7,57 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
 
+**步骤一 **
+导入数据：
 ```{r}
-#Body piercing data
-american.bp<-c(3,5,2,1,4,4,6,3,5,4)
-european.bp<-c(6,5,7,7,6,3,4,6,5,4)
-#Store data in a dataframe
-bp.survey <- data.frame("bp"=c(american.bp,european.bp),
-                        "group"=rep(c("American","European"),each=10),
-                        stringsAsFactors = FALSE)
+# 加载Hypothesis_pirates.RData文件中的数据
+load("Hypothesis_ pirates.RData")
+# 查看数据结构
+str(bp.survey)
+# 显示数据
 bp.survey
 ```
-**步骤一 **
-对海盗身体穿孔数目（按照美国、欧洲进行分组）进行箱线图绘制
+**步骤 1:**
+对海盗⾝体穿孔数⽬（按照美国，欧洲进⾏分组）进⾏箱线图绘图，解读图，阐述美国
+和欧洲是否有差异？
 ```{r}
-# 绘制箱线图
-# 安装yarrr包
-install.packages("yarrr")
+# 安装ggplot2包（如果你还没有安装）
+#install.packages("ggplot2")
 
-# 加载yarrr包
-library(yarrr)
-pirates_box <- pirates::piratesbox(bp.survey$bp, bp.survey$group)
-pirates_box
+# 加载ggplot2包
+library(ggplot2)
+# 绘制箱线图
+ggplot(bp.survey, aes(x = group, y = bp)) +
+  geom_boxplot() +
+  xlab("Group") +
+  ylab("Body Piercing Count") +
+  ggtitle("Body Piercing Count of American and European Pirates")
+```
+```{r}
+american<-subset(bp.survey,group=='American')
+american<-american.bp
+y<-boxplot.stats(american,coef=1.5,do.conf=TRUE,do.out=TRUE)
+#boxplot(american) #绘制箱线图y$statsy$out
+
+cat("美国海盗身体穿孔数目最小值：",y$stats[1],'\n')
+cat("美国海盗身体穿孔数目下四分位数：", y$stats[2],'\n')
+cat("美国海盗身体穿孔数目中位数：", y$stats[3],'\n')
+cat("美国海盗身体穿孔数目上四分位数：", y$stats[4],'\n')
+cat("美国海盗身体穿孔数目最大值：", y$stats[5],'\n')
+y$out
+
+european<-subset(bp.survey,group=='European')
+european<-european.bp
+european
+x<-boxplot.stats(european,coef=1.5,do.conf=TRUE,do.out=TRUE)
+x$stats
+
+cat("欧洲海盗身体穿孔数目最小值：",x$stats[1],'\n')
+cat("欧洲海盗身体穿孔数目下四分位数：", x$stats[2],'\n')
+cat("欧洲海盗身体穿孔数目中位数：", x$stats[3],'\n')
+cat("欧洲海盗身体穿孔数目上四分位数：", x$stats[4],'\n')
+cat("欧洲海盗身体穿孔数目最大值：", x$stats[5],'\n')
+x$out
 ```
 
 
