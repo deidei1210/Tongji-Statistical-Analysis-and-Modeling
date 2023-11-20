@@ -1,14 +1,75 @@
 ---
-title: "R Notebook"
+title: "2051498-储岱泽-方差分析"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+首先导入数据
+```{r}
+# 指定数据文件路径
+file_path <- "ANOVA_data_music.csv"
+# 加载CSV文件
+data <- read.csv(file_path)
+# 查看数据框的结构
+str(data)
+# 查看数据的前几行
+head(data)
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+```
+分别提取出control_group，treatment_group_1以及treatment_group_2这三个组。
+```{r}
+control_group<-subset(data,data$condition=='no_music')
+treatment_group_1<-subset(data,data$condition=='music_no_choice')
+treatment_group_2<-subset(data,data$condition=='music_choice')
+
+```
+```{r}
+# 将数据整合成一个列表
+data_list <- list(control_group$productivity, treatment_group_1$productivity, treatment_group_2$productivity)
+
+# 画箱线图
+boxplot(data_list, names=c('no_music', 'music_no_choice', 'music_choice'))
+```
+```{r}
+# 使用stats输出最小值、下四分位数、中位数、上四分位数、最大值以及离群点
+result <- boxplot(data_list, plot=FALSE)
+result$stats  # 输出最小值、下四分位数、中位数、上四分位数、最大值
+result$out    # 输出离群点
+```
+```{r}
+# 进行方差分析
+anova_result <- aov(productivity ~ condition, data = data)
+summary(anova_result)
+```
+根据方差分析的结果，我们可以看到自变量“condition”对因变量的影响是显著的。具体来说，F值为9.291，对应的p值为0.000159，远小于一般的显著性水平（比如0.05）。这表示我们有足够的证据拒绝原假设，即不同条件下的平均值没有显著差异的假设。因此，我们可以得出结论，不同的条件对因变量有显著影响。
+
+# 两两来看
+使用t检验来看no_music和music_no_choice是否有明显差异。
+```{r}
+# 执行独立样本t检验
+result <- t.test(control_group$productivity, treatment_group_1$productivity)
+# 输出结果
+print(result)
+```
+- t值为-0.36286，表示两组之间的工作效率差异相对较小。
+- df（自由度）为94.389，用于计算p值和置信区间。
+- p值为0.7175，大于通常的显著性水平（例如0.05），这意味着在统计学上没有足够的证据拒绝原假设。原假设可以理解为两组之间的工作效率没有显著差异。
+- 置信区间为(-17.12278, 11.83114)，表示我们对于两组均值之间的真实差异有95%的置信度落在这个区间内。
+- 样本估计值显示控制组的平均工作效率为174.4983，处理组1的平均工作效率为177.1442。
+总结来说，根据这次t检验的结果，在统计学上得出结论，即"no_music"组和"music_no_choice"组的工作效率之间没有显著差异。
+
+使用t检验来看no_music和music_choice是否有明显差异。
+```{r}
+# 执行独立样本t检验
+result <- t.test(control_group$productivity, treatment_group_2$productivity)
+# 输出结果
+print(result)
+```
 
 ```{r}
-plot(cars)
+# 执行独立样本t检验
+result <- t.test(treatment_group_1$productivity, treatment_group_2$productivity)
+# 输出结果
+print(result)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
