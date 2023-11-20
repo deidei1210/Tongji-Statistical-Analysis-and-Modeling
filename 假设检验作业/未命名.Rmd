@@ -9,6 +9,16 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 导入数据：
 ```{r}
+#Body piercing data
+american.bp<-c(3,5,2,1,4,4,6,3,5,4)
+european.bp<-c(6,5,7,7,6,3,4,6,5,4)
+#Store data in a dataframe
+bp.survey <- data.frame("bp"=c(american.bp,european.bp),
+                        "group"=rep(c("American","European"),each=10),
+                        stringsAsFactors = FALSE)
+```
+
+```{r}
 # 加载Hypothesis_pirates.RData文件中的数据
 load("Hypothesis_ pirates.RData")
 # 查看数据结构
@@ -94,7 +104,23 @@ print(t.test.result)
 **综上所述：**根据 t 检验的结果，可以得出结论：29 岁和 30 岁海盗的纹身情况在样本中没有表现出显著差异。
 
 ## 步骤四
+卡⽅检验(Chi-square test)可以⽤来判断⼀个因⼦变量是否依赖另⼀个因⼦变量，请考
+察**⼀个海盗上的⼤学和海盗是否佩戴眼罩**是否有关联，使⽤卡⽅检验，将结果保存在 R 变量
+c.test 中，查看 c.test 对象内容，依据对象内容来回答 “⼀个海盗上的⼤学和海盗是否佩戴眼
+罩是否有关联”这个问题。
+```{r}
+# 假设这里有相应的数据，海盗上的大学信息保存在 university 中，佩戴眼罩的信息保存在 eyepatch 中
+university<-pirates$college
+eyepatch<-pirates$eyepatch
+#university
+#eyepatch
+# 执行卡方检验
+c.test <- chisq.test(university, eyepatch)
 
+# 查看 c.test 对象内容
+print(c.test)
+```
+根据卡方检验的结果，p 值为 1，这意味着我们没有足够的证据拒绝零假设。所以，在这个样本中，海盗上的大学和是否佩戴眼罩之间似乎没有显著的关联。我们无法得出海盗上的大学和是否佩戴眼罩之间存在关联的结论。
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
 
