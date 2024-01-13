@@ -8,4 +8,4 @@
 <p align = 'center'>能力有限，仅供参考与学习🌸</p>
 <p align = 'center'>方便自己之后回过来看也希望对大家有所帮助捏！👀</p>
 
-
+期末项目内容请看：https://github.com/deidei1210/Statistical-Analysis-and-Modeling-Final-Project
