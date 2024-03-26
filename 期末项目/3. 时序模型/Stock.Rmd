@@ -1,0 +1,1032 @@
+---
+title: "Stock"
+output: html_notebok
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+# 安装和加载必要的库
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 读取数据
+stock_data <- read.csv("stock.csv", stringsAsFactors = FALSE)
+
+# 数据预处理：统一日期格式
+stock_data$Date <- as.Date(stock_data$Date, format="%m/%d/%Y")
+
+# 清理并转换股票价格和交易量数据：将价格变成数据
+price_columns <- c("Close.Last", "Open", "High", "Low")
+for (col in price_columns) {
+  stock_data[[col]] <- as.numeric(gsub("\\$", "", stock_data[[col]]))
+}
+stock_data$Volume <- as.numeric(gsub(",", "", stock_data$Volume))
+
+# 处理缺失值
+# 这里的策略是删除任何包含缺失值的行
+stock_data <- na.omit(stock_data)
+
+# 处理异常值，保证所有数据都是非负数
+stock_data <- stock_data %>% 
+  filter(Close.Last > 0, Open > 0, High > 0, Low > 0, Volume > 0)
+# 数据去重
+stock_data <- distinct(stock_data)
+# 只关心'Company'和'Date'列的重复值
+stock_data <- distinct(stock_data, Company, Date, .keep_all = TRUE)
+
+# 计算每个公司的开盘价相对于上一个交易日的涨幅
+stock_data <- stock_data %>%
+  group_by(Company) %>%
+  arrange(Company, Date) %>%
+  mutate(OpenIncreaseRate = ((Open-lag(Close.Last)) / lag(Close.Last)))
+
+
+# 计算每个公司的日收益率
+stock_data <- stock_data %>%
+  group_by(Company) %>%
+  arrange(Company, Date) %>%
+  mutate(IncreaseRate = ((Close.Last-lag(Close.Last)) / lag(Close.Last)))
+
+# 处理缺失值
+# 这里的策略是删除任何包含缺失值的行
+stock_data <- na.omit(stock_data)
+
+# 为每个公司绘制箱线图（以'Close.Last'为例）
+ggplot(stock_data, aes(x = Company, y = Close.Last)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Closing Prices for Each Company", x = "Company", y = "Close/Last Price")
+
+ggplot(stock_data, aes(x = Company, y = Volume)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Volume for Each Company", x = "Company", y = "Volume")
+
+ggplot(stock_data, aes(x = Company, y = High)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of The Highest Prices for Each Company", x = "Company", y = "The Highest Price")
+
+ggplot(stock_data, aes(x = Company, y = Low)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of The Lowest Prices for Each Company", x = "Company", y = "The Lowest Price")
+```
+
+```{r}
+
+# 为每个公司绘制和交易量的散点图
+ggplot(stock_data, aes(x = Volume, y = IncreaseRate, color = Company)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Volume vs. IncreaceRate", x = "Volume", y = "IncreaceRate")
+
+
+```
+
+```{r}
+# 可视化所有公司股价随时间的变化
+ggplot(stock_data, aes(x = Date, y = Close.Last, color = Company)) +
+  geom_line() +
+  labs(title = "Stock Price Over Time for All Companies", x = "Date", y = "Close Price") +
+  theme(legend.position = "bottom")
+# 获取公司列表
+companies <- unique(stock_data$Company)
+
+library(zoo)
+
+# 设置移动平均的窗口大小，例如30天
+window_size <- 30
+
+# 为每个公司创建单独的股价图，包括移动平均线
+for (company in unique(stock_data$Company)) {
+  company_data <- filter(stock_data, Company == company)
+
+  # 计算移动平均
+  company_data$MA <- rollmean(company_data$Close.Last, window_size, align = "right", fill = NA)
+
+  # 绘制股价图和移动平均线
+  p <- ggplot(company_data, aes(x = Date)) +
+       geom_line(aes(y = Close.Last), color = "blue") +
+       geom_line(aes(y = MA), color = "red", na.rm = TRUE) +
+       labs(title = paste(company, "Stock Price with Moving Average"), x = "Date", y = "Close Price") +
+       theme(legend.position = "bottom")
+  print(p)
+}
+
+```
+
+```{r}
+# 为相关性分析准备数据
+stock_data_wide <- stock_data %>%
+  select(Date, Company, Close.Last) %>%
+  spread(key = Company, value = Close.Last)
+
+# 计算相关性
+corr_matrix <- cor(stock_data_wide[, -1], use="complete.obs")
+
+# 可视化相关性矩阵
+heatmap(corr_matrix, main="Stock Price Correlation Between Companies", Colv=NA, Rowv=NA)
+print(corr_matrix)
+
+```
+
+```{r}
+
+library(forecast)
+library(ggplot2)
+library(dplyr)
+library(tseries)
+
+# 对每个公司的数据进行季节性分解
+results <- data.frame(Company = character(),
+                      Seasonality_Strength = numeric(),
+                      ACF_Value = numeric(),
+                      PACF_Value = numeric(),
+                      p_value = numeric(),
+                      stringsAsFactors = FALSE)
+
+
+for (company in unique(stock_data$Company)) {
+  company_data <- filter(stock_data, Company == company)
+
+  # 将价格数据转换为时间序列对象
+  ts_data <- ts(company_data$Close.Last, frequency=252)  # 假设一年有252个交易日
+
+  # STL分解
+  decomposed <- stl(ts_data, s.window="periodic")
+
+  # 提取季节性成分
+  seasonality <- decomposed$time.series[, "seasonal"]
+
+  # 将季节性数据转换为数据框
+  seasonal_data <- data.frame(Date = company_data$Date, Seasonality = seasonality)
+  
+  # 绘制季节性图
+  pic<-ggplot(seasonal_data, aes(x = Date, y = Seasonality)) +
+    geom_line() +
+    labs(title = paste(company, "Seasonal Variation in Stock Price"), x = "Date", y = "Seasonality") +
+    theme(legend.position = "bottom")
+    print(pic)
+    
+    
+      # 计算季节性强度
+  seasonality_strength <- 1 - var(decomposed$time.series[, "remainder"]) / var(decomposed$time.series[, "seasonal"] + decomposed$time.series[, "remainder"])
+  
+  # 自相关和偏自相关
+  acf_value <- acf(ts_data, plot = FALSE)$acf[2]  # 取第一个非自相关的值
+  pacf_value <- pacf(ts_data, plot = FALSE)$acf[2]
+  
+  # Augmented Dickey-Fuller Test 来检查季节性单位根
+  adf_test <- adf.test(ts_data, alternative = "stationary")
+  
+  # 存储结果
+  results <- rbind(results, data.frame(Company = company,
+                                       Seasonality_Strength = seasonality_strength,
+                                       ACF_Value = acf_value,
+                                       PACF_Value = pacf_value,
+                                       p_value = adf_test$p.value))
+}
+
+# 输出结果
+print(results)
+# 决定是否使用SARIMA模型
+# 如果季节性强度显著，ACF/PACF表明季节性滞后，且单位根检验p值小于显著性水平（通常是0.05）
+# 则可能需要使用SARIMA模型
+results %>%
+  mutate(Use_SARIMA = ifelse(Seasonality_Strength > 0.5 & p_value < 0.05, TRUE, FALSE)) %>%
+  select(Company, Use_SARIMA) %>%
+  print()
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+
+# 计算每个公司的日收益率
+stock_data <- stock_data %>%
+  group_by(Company) %>%
+  arrange(Company, Date) %>%
+  mutate(Return = (Close.Last / lag(Close.Last) - 1) * 100)
+
+# 移除缺失值
+stock_data <- na.omit(stock_data)
+
+# 使用ggplot2可视化所有公司的日收益率
+ggplot(stock_data, aes(x = Date, y = Return, color = Company)) +
+  geom_line() +
+  labs(title = "Daily Stock Returns of All Companies", 
+       x = "Date", 
+       y = "Daily Return (%)") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+# 获取所有公司的列表
+companies <- unique(stock_data$Company)
+
+# 为每个公司创建一个图
+plots_list <- lapply(companies, function(company) {
+  company_data <- filter(stock_data, Company == company)
+  ggplot(company_data, aes(x = Date, y = Return)) +
+    geom_line() +
+    labs(title = paste("Daily Stock Returns of", company),
+         x = "Date",
+         y = "Daily Return (%)") +
+    theme_minimal()
+})
+plots_list
+
+
+```
+```{r}
+
+# 按照公司名称分组并计算每个组的收益率标准差
+grouped_data <- stock_data %>%
+  group_by(Company) %>%
+  summarize(StdDev = sd(IncreaseRate))
+
+# 计算标准差并转换为年化波动率
+grouped_data <- grouped_data %>%
+  mutate(AnnualizedVolatility = StdDev * sqrt(252))
+
+# 打印结果
+print(grouped_data)
+
+
+# 使用ggplot2绘制柱状图
+ggplot(grouped_data, aes(x = Company, y = AnnualizedVolatility,fill = Company)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Standard Deviation of Returns by Company",
+       x = "Company",
+       y = "Standard Deviation")
+
+```
+```{r}
+library(dplyr)
+
+max_drawdown <- function(returns) {
+  max_so_far <- 0  #用于记录迄今为止的最大值。
+  drawdown <- rep(0, length(returns))
+  for (i in 2:length(returns)) {
+    max_so_far <- max(max_so_far, returns[i-1])#更新迄今为止的最大值
+    drawdown[i] <- (max_so_far - returns[i])/max_so_far
+  }
+  return(max(drawdown))
+}
+
+# 按照 Company 列进行分组，计算每个公司的最大回撤
+result <- stock_data %>% 
+  group_by(Company) %>% 
+  summarize(MaxDrawdown = max_drawdown(Close.Last))
+
+# 使用ggplot2绘制柱状图
+ggplot(result, aes(x = Company, y = MaxDrawdown,fill = Company)) +
+  geom_bar(stat = "identity") +
+  labs(title = "The max drawdown of each Company",
+       x = "Company",
+       y = "MaxDrawdown")
+
+# 输出结果
+print(result)
+
+```
+
+```{r}
+library(ggplot2)
+
+# 为每个公司绘制OpenIncreaseRate和涨幅的散点图
+ggplot(stock_data, aes(x = OpenIncreaseRate, y = IncreaseRate, color = Company)) +
+  geom_point() +
+  labs(title = "Scatter Plot of OpenIncreaseRate vs. IncreaseRate", x = "OpenIncreaseRate", y = "IncreaseRate")
+
+# 计算每个公司属性的相关系数
+correlation_data <- stock_data %>%
+  group_by(Company) %>%
+  summarize(correlation = cor(OpenIncreaseRate, IncreaseRate, use = "complete.obs")) %>%
+  na.omit()
+
+# 创建一个单独的条形图来显示相关系数
+ggplot(correlation_data, aes(x = Company, y = correlation, fill = Company)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Correlation Coefficient between OpenIncreaseRate and IncreaseRate by Company", x = "Company", y = "Correlation") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # 若公司名称较长，可调整文本角度以便阅读
+
+
+```
+
+
+#使用人工方式获取增长量最佳模型
+```{r}
+library(forecast)
+library(dplyr)
+library(tseries)
+
+company_list <- unique(stock_data$Company)
+final_model_info <- list()
+
+# 评分函数定义
+score_model <- function(mape, rmse, lb_p_value, aic) {
+  # 分配权重
+  weights <- c(MAPE = 0.2, RMSE = 0.2, LB = 0.1, AIC = 0.5)
+
+  # 归一化指标
+  normalized_mape <- 1 / (mape + 1)  # 防止除零错误
+  normalized_rmse <- 1 / (rmse + 1)
+  normalized_lb <- ifelse(lb_p_value > 0.05, 1, 0)  # p值大于0.05
+  normalized_aic <- 1 / (aic + 1)
+
+  # 计算综合得分
+  score <- sum(weights['MAPE'] * normalized_mape,
+               weights['RMSE'] * normalized_rmse,
+               weights['LB'] * normalized_lb,
+               weights['AIC'] * normalized_aic)
+
+  return(score)
+}
+
+
+for (company in company_list) {
+  
+  company_data <- filter(stock_data, Company == company)
+  ts_data <- ts(company_data$Close.Last)
+  
+  
+  #用于确定差分次数
+  diff_ts_data <- ts(company_data$Close.Last)
+  # 确定差分次数
+  d <- 0
+  adf_test <- adf.test(diff_ts_data, alternative = "stationary")
+  while (adf_test$p.value > 0.05 && d < 2) {
+    diff_ts_data <- diff(diff_ts_data, differences = 1)
+    d <- d + 1
+    adf_test <- adf.test(diff_ts_data, alternative = "stationary")
+  }
+
+
+  # 设置训练集和测试集的大小
+  train_size <- floor(length(ts_data) * 0.8)
+  train_set <- ts_data[1:train_size]
+  test_set <- ts_data[(train_size + 1):length(ts_data)]
+
+  # 人工搜索最佳ARIMA模型
+  best_manual_score <- -Inf
+  best_manual_model_info <- list()
+
+  p_range <- 0:5
+  q_range <- 0:5
+
+  for (p in p_range) {
+      for (q in q_range) {
+        try({
+          model <- Arima(train_set, order=c(p, d, q))
+          forecasted_values <- forecast(model, h = length(test_set))
+          model_metrics <- accuracy(forecasted_values, test_set)
+          lb_test <- Box.test(residuals(model), type = "Ljung-Box")
+          aic_value <- AIC(model)
+
+          # 计算当前模型的得分
+          current_score <- score_model(model_metrics['Test set', 'MAPE'],
+                                       model_metrics['Test set', 'RMSE'],
+                                       lb_test$p.value,
+                                       aic_value)
+
+          # 更新最佳模型
+          if (current_score > best_manual_score) {
+            best_manual_score <- current_score
+            best_manual_model_info <- list(
+              PDQ = c(p, d, q),
+              AIC = aic_value,
+              Metrics = model_metrics,
+              LjungBoxTest = lb_test
+            )
+          }
+        }, silent = TRUE)
+      }
+    }
+
+  # auto.arima模型
+  auto_model <- auto.arima(train_set, stepwise = FALSE, approximation = FALSE)
+  auto_forecast <- forecast(auto_model, h = length(test_set))
+  auto_metrics <- accuracy(auto_forecast, test_set)
+  auto_aic <- auto_model$aic
+  auto_lb_test <- Box.test(residuals(auto_model), type = "Ljung-Box")
+  auto_score <- score_model(auto_metrics['Test set', 'MAPE'],
+                            auto_metrics['Test set', 'RMSE'],
+                            auto_lb_test$p.value,
+                            auto_aic)
+
+  # 选择得分最高的模型
+  if (best_manual_score > auto_score) {
+    final_model_info[[company]] <- best_manual_model_info
+  } else {
+    final_model_info[[company]] <- list(
+      PDQ = arimaorder(auto_model),
+      AIC = auto_aic,
+      Metrics = auto_metrics,
+      LjungBoxTest = auto_lb_test
+    )
+  }
+
+  # 打印最终模型信息
+  print(paste("Final model for", company))
+  print(final_model_info[[company]])
+}
+
+```
+
+
+
+
+
+
+#auto.arima模型
+```{r} 
+library(forecast)
+library(dplyr)
+library(tseries)
+
+company_list <- unique(stock_data$Company)
+best_pdq_params <- list()
+company_forecasts_future <- list()
+model_performance <- list()
+model_aic_values <- list()
+model_box <- list()
+
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  
+  ts_data <- ts(company_data$Close.Last)
+
+  # 设置训练集和测试集的大小
+  train_size <- floor(length(ts_data) * 0.8)
+  train_set <- ts_data[1:train_size]
+  test_set <- ts_data[(train_size + 1):length(ts_data)]
+
+  # 使用训练集和测试集确定最佳 pdq
+  if (length(test_set) > 0) {
+    fit <- auto.arima(train_set, stepwise = FALSE, approximation = FALSE)
+    
+    # 在测试集上验证模型性能
+    test_forecast <- forecast(fit, h = length(test_set))
+    model_performance[[company]] <- accuracy(test_forecast, test_set)
+    model_aic_values[[company]] <- fit$aic
+    
+        # 计算残差
+    residuals <- residuals(fit)
+    # 进行Ljung-Box检验
+    model_box[[company]] <- Box.test(residuals, type = "Ljung-Box")
+    
+    #判断Arima模型的参数值
+    best_pdq_params[[company]] <- arimaorder(fit)
+  } else {
+    best_pdq_params[[company]] <- c(NA, NA, NA)
+    model_aic_values[[company]] <- NA
+  }
+ # 打印参数和性能指标
+  print(paste("Best model for", company, ": ARIMA", 
+              paste(best_pdq_params[[company]], collapse = ","), 
+              "AIC:", model_aic_values[[company]]))
+  print(model_performance[[company]])
+  print(model_box[[company]])
+}
+
+
+
+```
+
+#使用预先模型预测未来
+```{r}
+library(forecast)
+library(dplyr)
+library(tseries)
+# 使用全数据集和最佳 pdq 预测未来
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  ts_data <- ts(company_data$Close.Last)
+  
+  pdq <- final_model_info[[company]]$PDQ
+
+  if (!is.na(pdq[1])) {
+    fit_future <- Arima(ts_data, order = pdq)
+    forecast_future <- forecast(fit_future, h = 5) # 预测未来50天
+
+    company_forecasts_future[[company]] <- list(
+      Model = fit_future,
+      Forecast = forecast_future
+    )
+  } else {
+    company_forecasts_future[[company]] <- list(
+      Model = NA,
+      Forecast = NA
+    )
+  }
+
+  # 打印未来预测结果
+  forecast_info <- company_forecasts_future[[company]]
+  cat("公司:", company, "\n")
+  cat("用于未来预测的模型信息:\n")
+  print(forecast_info$Model)
+  cat("未来5天的预测结果:\n")
+  print(forecast_info$Forecast)
+  cat("\n")
+}
+
+```
+
+#直接使用auto.arima预测
+```{r}
+library(forecast)
+library(dplyr)
+library(tseries)
+
+# 使用全数据集和 auto.arima 预测未来
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  ts_data <- ts(company_data$Close.Last)
+  
+  # 使用 auto.arima 自动选择最佳 pdq
+  fit_future <- auto.arima(ts_data, stepwise = FALSE, approximation = FALSE)
+  forecast_future <- forecast(fit_future, h = 20) # 预测未来20天
+
+  # 保存预测结果
+  company_forecasts_future[[company]] <- list(
+    Model = fit_future,
+    Forecast = forecast_future
+  )
+
+  # 打印未来预测结果
+  cat("公司:", company, "\n")
+  cat("用于未来预测的模型信息:\n")
+  print(fit_future)
+  cat("未来5天的预测结果:\n")
+  print(forecast_future)
+  cat("\n")
+}
+
+```
+
+
+#增长量-绘图
+```{r}
+library(ggplot2)
+library(forecast)
+library(dplyr)
+
+forecast_period <- 5
+history_period <- 20  # 设置历史数据长度为240天
+
+# 遍历每个公司进行预测并绘制图表
+for (company in company_list) {
+  # 获取当前公司的模型信息和预测结果
+  forecast_info <- company_forecasts_future[[company]]
+
+  # 确定历史数据的最后一个时间点作为起始点
+  last_observation <- max(stock_data$Date[stock_data$Company == company])
+  
+  # 选取最近的历史数据，限制为40天
+  historical_data <- filter(stock_data, Company == company & Date > (last_observation - history_period))
+
+  # 生成未来天数的日期
+  future_dates <- seq(from = last_observation + 1, by = "days", length.out = forecast_period)
+
+  # 创建包含历史和预测数据的数据框
+  # 将预测数据的开始设置为 last_observation
+  forecast_data <- data.frame(
+    Date = c(historical_data$Date, future_dates),
+    Price = c(historical_data$Close.Last, forecast_info$Forecast$mean),
+    Type = c(rep("Historical", length(historical_data$Date)), rep("Forecasted", length(future_dates))),
+    Company = company
+  )
+  
+  # 创建ggplot对象并绘制折线图
+  p <- ggplot(forecast_data, aes(x = Date, y = Price, color = Type)) +
+    geom_line() +
+    geom_segment(aes(x = last(historical_data$Date), y = last(historical_data$Close.Last),
+                     xend = first(future_dates), yend = first(forecast_info$Forecast$mean)),
+                 color = "blue") +  # 使用蓝色连接最后一天历史数据和第一天预测数据
+    labs(title = paste("Stock Price Forecast for", company),
+         x = "Date",
+         y = "Stock Price") +
+    scale_color_manual(values = c("blue", "red")) +
+    theme_minimal()
+  
+  # 输出图表为PNG文件
+  file_name <- paste0("Stock_Price_Forecast_normal_", company, ".png")
+  ggsave(file_name, plot = p, width = 10, height = 6, dpi = 300)
+}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#时间序列窗口的Arima模型 
+```{r}  
+
+library(forecast)
+library(dplyr)
+library(tseries)
+
+company_list <- unique(stock_data$Company)
+company_forecasts <- list()
+
+window_size <- 80  # 窗口大小，可以根据需要调整
+forecast_length <- 1  # 预测步长，通常为1
+
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  ts_data <- ts(rev(company_data$Close.Last))
+
+
+  total_length <- length(ts_data)
+  forecasts <- list()
+
+  for (start in seq(1, total_length - window_size - forecast_length)) {
+    train_set <- ts_data[start:(start + window_size - 1)]
+    fit <- auto.arima(train_set, stepwise = FALSE, approximation = FALSE)
+    forecast_result <- forecast(fit, h = forecast_length)
+
+    forecasts[[start]] <- forecast_result
+  }
+
+  company_forecasts[[company]] <- forecasts
+}
+
+# 打印每个公司的预测结果
+for (company in company_list) {
+  cat("公司:", company, "\n")
+  forecasts <- company_forecasts[[company]]
+  for (f in forecasts) {
+    cat("预测结果:\n")
+    print(f)
+  }
+  cat("\n")
+}
+
+```
+
+#找出最佳模型-增长率
+```{r}
+library(forecast)
+library(dplyr)
+library(tseries)
+library(ggplot2)
+
+
+company_list <- unique(stock_data$Company)
+best_pdq_params_increase <- list()
+model_performance <- list()
+
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  
+  ts_data <- ts(company_data$IncreaseRate)
+
+  # 设置训练集和测试集的大小
+  train_size <- floor(length(ts_data) * 0.8)
+  train_set <- ts_data[1:train_size]
+  test_set <- ts_data[(train_size + 1):length(ts_data)]
+
+  # 使用训练集和测试集确定最佳 pdq
+  if (length(test_set) > 0) {
+    fit <- auto.arima(train_set, stepwise = FALSE, approximation = FALSE)
+    best_pdq_params_increase[[company]] <- arimaorder(fit)
+    
+    # 在测试集上验证模型性能
+    test_forecast <- forecast(fit, h = length(test_set))
+    model_performance[[company]] <- accuracy(test_forecast, test_set)
+
+  } else {
+    best_pdq_params_increase[[company]] <- c(NA, NA, NA)
+  }
+  print(best_pdq_params_increase[[company]])
+  print(model_performance[[company]])
+}
+
+
+
+```
+
+#预测未来值
+```{r}
+library(forecast)
+library(dplyr)
+library(tseries)
+library(ggplot2)
+
+
+# 使用全部数据和最佳参数进行预测
+for (company in company_list) {
+  company_data <- filter(stock_data, Company == company)
+  ts_data <- ts(company_data$IncreaseRate)
+
+  # 检索最佳参数
+  pdq <- best_pdq_params_increase[[company]]
+  if (!is.na(pdq[1])) {
+    fit_future <- Arima(ts_data, order = pdq)
+    forecast_future <- forecast(fit_future, h = 20) # 预测未来20天
+
+    company_forecasts_future_increase[[company]] <- list(
+      Model = fit_future,
+      Forecast = forecast_future
+    )
+  } else {
+    company_forecasts_future_increase[[company]] <- list(
+      Model = NA,
+      Forecast = NA
+    )
+  }
+}
+
+```
+
+#根据增长率预测未来股票值
+```{r}
+library(ggplot2)
+library(forecast)
+library(dplyr)
+
+forecast_period <- 20  # 预测未来20天
+history_period <- 20   # 显示过去20天的历史数据
+
+# 遍历每个公司进行预测并绘制图表
+for (company in company_list) {
+  forecast_info <- company_forecasts_increase[[company]]
+  
+  last_observation <- max(stock_data$Date[stock_data$Company == company])
+  future_dates <- seq(from = last_observation + 1, by = "days", length.out = forecast_period)
+  
+  forecast_values <- forecast(forecast_info$Model, h = forecast_period)
+  
+  # 选取最近的历史数据，限制为20天
+  historical_data <- filter(stock_data, Company == company & Date > (last_observation - history_period))
+
+  # 计算未来股价，基于最后一个已知股价和预测增长率
+  last_historical_price <- tail(historical_data$Close.Last, 1)
+  forecasted_growth_rates <- forecast_values$mean
+
+  # 初始化未来价格向量
+  forecasted_prices <- numeric(forecast_period)
+  forecasted_prices[1] <- last_historical_price * (1 + forecasted_growth_rates[1])
+
+  # 累积计算未来价格
+  for (i in 2:length(forecasted_growth_rates)) {
+    forecasted_prices[i] <- forecasted_prices[i - 1] * (1 + forecasted_growth_rates[i])
+  }
+
+  forecast_data <- data.frame(
+    Date = c(historical_data$Date, future_dates),
+    Price = c(historical_data$Close.Last, forecasted_prices),
+    Type = c(rep("Historical", nrow(historical_data)), rep("Forecasted", forecast_period)),
+    Company = company
+  )
+
+  # 创建ggplot对象并绘制折线图
+  p <- ggplot(forecast_data, aes(x = Date, y = Price, color = Type)) +
+    geom_line() +
+    geom_segment(aes(x = max(historical_data$Date), y = last(historical_data$Close.Last),
+                  xend = future_dates[1], yend = forecasted_prices[1]),
+              color = "blue") +
+    labs(title = paste("Stock Price Forecast for", company),
+         x = "Date",
+         y = "Stock Price") +
+    scale_color_manual(values = c("blue", "red")) +
+    theme_minimal()
+  
+  # 输出图表为PNG文件
+  file_name <- paste0("Stock_Price_Forecast_increase_", company, ".png")
+  ggsave(file_name, plot = p, width = 10, height = 6, dpi = 300)
+}
+
+
+```
+
+#LSTM
+```{r}
+library(reticulate)
+use_python("D:/anaconda3/envs/emotion/python.exe", required = TRUE) 
+
+library(keras)
+library(dplyr)
+
+# 设置LSTM模型的参数
+look_back <- 60
+batch_size <- 1
+
+# 函数来创建数据集
+create_dataset <- function(data, look_back, forecast_horizon) {
+  x_data <- list()
+  y_data <- list()
+  for (i in 1:(length(data) - look_back - forecast_horizon + 1)) {
+    x_data[[i]] <- data[i:(i + look_back - 1)]
+    y_data[[i]] <- data[(i + look_back):(i + look_back + forecast_horizon - 1)]
+  }
+  return(list(X = array(unlist(x_data), dim = c(length(x_data), look_back, 1)), 
+              Y = matrix(unlist(y_data), nrow = length(x_data), byrow = TRUE)))
+}
+
+
+# 为每个公司创建和训练LSTM模型
+company_list <- unique(stock_data$Company)
+company_forecasts_LSTM <- list()
+
+for (company in company_list) {
+  # 获取并处理数据
+
+  # 过滤特定公司的数据并且选择 `increaseRate` 列
+  company_data <- stock_data %>%
+    filter(Company == company) %>%
+    pull(increaseRate) 
+
+  # 确保 `increaseRate` 列是数值型
+  if (!is.numeric(company_data)) {
+    company_data <- as.numeric(company_data)
+  }
+  
+  # 标准化数据
+  company_data_scaled <- scale(company_data)
+  
+  # 确保返回的是向量
+  if (!is.vector(company_data_scaled)) {
+    company_data_scaled <- as.vector(company_data_scaled)
+  }
+
+  forecast_horizon <- 180  # 未来半年的天数
+  dataset <- create_dataset(company_data, look_back,forecast_horizon)
+  
+  model <- keras_model_sequential() %>%
+    layer_lstm(units = 50, input_shape = c(look_back, 1), return_sequences = TRUE) %>%
+    layer_dropout(rate = 0.2) %>%
+    layer_lstm(units = 50, return_sequences = TRUE) %>%
+    layer_dropout(rate = 0.2) %>%
+    layer_lstm(units = 50) %>%
+    layer_dropout(rate = 0.2) %>%
+    layer_dense(units = forecast_horizon)  # 修改为预测未来180天
+  
+  model %>% compile(
+    loss = 'mean_squared_error',
+    optimizer = optimizer_adam()
+  )
+
+
+  # 训练模型
+  model %>% fit(
+    dataset$X, dataset$Y,
+    epochs = 1,
+    batch_size = batch_size,
+    verbose = 2
+  )
+
+  # 存储每个公司的模型
+  company_forecasts_LSTM[[company]] <- model
+  print(company_forecasts_LSTM[[company]])
+}
+
+```
+#根据LSTM预测
+```{r}
+# 初始化一个列表来存储预测结果
+company_predictions <- list()
+all_company_predictions_df <- data.frame()
+# 遍历每个公司进行预测
+for (company in company_list) {
+  # 获取模型
+  model <- company_forecasts_LSTM[[company]]
+  
+  # 准备预测数据
+  company_data <- stock_data %>%
+    filter(Company == company) %>%
+    arrange(desc(Date)) %>%  # 确保数据是按日期降序排列的
+    pull(increaseRate)
+    
+  # 如果数据不足以进行预测，则跳过
+  if (length(company_data) < look_back) {
+    company_predictions[[company]] <- NA
+    next
+  }
+  
+  # 使用最新的look_back天数据进行预测
+  predict_data <- head(company_data, look_back)
+  
+  # 标准化数据
+  predict_data_scaled <- scale(predict_data)
+  
+  # 转换为模型需要的格式
+  predict_data_formatted <- array(predict_data_scaled, dim = c(1, look_back, 1))
+  
+  # 进行预测
+  prediction <- model %>% predict(predict_data_formatted)
+  
+  # 将预测结果转换为数据框，并添加公司名称
+  prediction_df <- data.frame(Company = company, t(prediction))
+  
+  # 将当前公司的预测结果添加到汇总的数据框中
+  all_company_predictions_df <- rbind(all_company_predictions_df, prediction_df)
+}
+
+# 查看汇总的预测结果数据框
+print(all_company_predictions_df)
+```
+#画图
+```{r}
+library(ggplot2)
+library(dplyr)
+
+forecast_period <- 180
+
+# 确保 all_company_predictions_df 已经包含 Company 列
+if (!"Company" %in% names(all_company_predictions_df)) {
+  stop("all_company_predictions_df 中缺少 Company 列")
+}
+
+# 遍历每个公司进行绘图
+for (company in unique(all_company_predictions_df$Company)) {
+  # 获取历史数据和最后一天股价
+  historical_data <- stock_data %>%
+    filter(Company == company) %>%
+    select(Date, Close.Last)
+  
+  last_historical_price <- tail(historical_data$Close.Last, 1)
+  
+  # 获取预测增长率
+  forecasted_growth_rates <- all_company_predictions_df %>%
+    filter(Company == company) %>%
+    select(-Company)
+
+  # 计算未来股价
+  forecasted_prices <- last_historical_price * cumprod(1 + as.matrix(forecasted_growth_rates))
+
+  # 创建未来日期
+  last_observation <- max(historical_data$Date)
+  future_dates <- seq(from = last_observation + 1, by = "days", length.out = forecast_period)
+  
+  # 合并历史和预测数据
+  forecast_data <- data.frame(
+    Date = c(historical_data$Date, future_dates),
+    Price = c(historical_data$Close.Last, forecasted_prices),
+    Type = c(rep("Historical", nrow(historical_data)), rep("Forecasted", forecast_period))
+  )
+  
+  # 绘制股价走势图
+  p <- ggplot(forecast_data, aes(x = Date, y = Price, color = Type)) +
+    geom_line() +
+    labs(title = paste("Stock Price Forecast for", company),
+         x = "Date",
+         y = "Stock Price") +
+    scale_color_manual(values = c("blue", "red")) +
+    theme_minimal()
+  
+ # 输出图表为PNG文件
+  file_name <- paste0("Stock_Price_Forecast_LSTM_", company, ".png")
+  ggsave(file_name, plot = p, width = 10, height = 6, dpi = 300)
+}
+
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

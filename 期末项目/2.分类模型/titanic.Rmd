@@ -1,0 +1,255 @@
+---
+title: "Titanic"
+output: html_notebook
+---
+
+一.导入数据
+```{r}
+# 导入必要的库
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(mice)
+library(caret)
+
+# 读取数据
+titanic_data <- read.csv("titanic.csv")
+```
+二.数据预处理
+```{r}
+#转换数据类型
+titanic_data$Survived<-as.factor(titanic_data$Survived)
+titanic_data$Sex<-as.factor(titanic_data$Sex)
+titanic_data$SibSp<-as.numeric(titanic_data$SibSp)
+titanic_data$Parch<-as.numeric(titanic_data$Parch)
+#数据预处理
+summary(titanic_data)
+#查找缺失值
+sapply(titanic_data, function(x) sum(is.na(x)))
+#查找空值
+sapply(titanic_data, function(x) sum(x==""))
+```
+可以看出Age变量有177个缺失值；Cabin有687个空值，Embarked有2个空值。
+(1).处理Embarked空值
+处理策略：根据客舱等级与费用推测两个乘客的进港口
+```{r}
+#确定空值对应行数的变量Pclass,Fare
+titanic_data[which(titanic_data$Embarked==""),c("Pclass","Fare")]
+```
+发现Embarked为空值第62、830行的乘客，都是乘坐一等舱，费用为80美元。接下来，将一等舱乘客的 Fare、Pclass 、Embarked筛选出来。再根据乘坐一等舱从不同的进港口的平均费用多少推测出两个空值的对应进港口。
+
+```{r}
+filter1<-titanic_data[which(titanic_data$Pclass=="1"),c("Fare","Pclass","Embarked")]
+S_fare<-median(filter1$Fare[which(filter1$Embarked=="S")])
+C_fare<-median(filter1$Fare[which(filter1$Embarked=="C")])
+Q_fare<-median(filter1$Fare[which(filter1$Embarked=="Q")])
+S_fare
+C_fare
+Q_fare
+```
+发现从C进港口的费用与80美元接近，所以，将两个Embarked缺失值赋值为C
+```{r}
+titanic_data$Embarked[c(62,830)]<-"C"
+```
+(2).处理Cabin空值
+处理策略：由于总共891条数据，Cabin存在687条空值，无法代表整体数据，所以直接把该变量剔除。
+```{r}
+titanic_data$Cabin<-NULL
+```
+
+(3).处理Age缺失值
+处理策略：由于缺失值个数较多，运用mice包，进行系统自动根据数据特征自动填补缺失值。先利用mice()函数建模，再利用complete()函数生成完整的数据。
+```{r}
+#插补缺失值
+tempdata<-mice(titanic_data[,!names(titanic_data)%in%c('PassengerId','Ticket','Survived','Name')],method ="pmm")
+completedata<-complete(tempdata)
+sapply(completedata,function(x) sum(is.na(x)))
+sapply(completedata,function(x) sum(x==""))
+```
+
+```{r}
+#作图比较数据特征
+par(mfrow=c(1,2))  #设置图形的放置
+hist(titanic_data$Age,freq = F,main='originaldata Age',ylim=c(0,0.04))
+hist(completedata$Age,freq = F,main='completedata Age',ylim=c(0,0.04) )
+par(mfrow=c(1,1)) #恢复一行一个图形的设置
+```
+通过图形可以发现，原先的full中Age的密度分布图和填补过后的completefull中Age的密度分布图没有多大差异，所以该填补缺失值是成功的。
+```{r}
+titanic_data$Age<-completedata$Age
+```
+
+三.数据分析&结论
+
+(1).Pclass对生存率的影响
+```{r}
+ggplot(titanic_data,mapping = aes(x=Pclass,y=after_stat(count),fill=Survived))+
+  geom_bar(stat = "count",position = "dodge")+
+  labs(title="Effect of Pclass on survival",x="Pclass",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(0.9),vjust=0)
+```
+通过图可以发现，虽然每个舱位等级存活的人数都在100人左右，但是在生存率上一等舱的乘客为62.96%，二等舱的乘客47.28%，而三等舱的生存率只有24.24%。所以，可以发现舱位等级越高，生存率越高。
+
+(2).Name对生存率的影响
+Name中含有Mrs，Miss等称呼，可以作为头衔标签对其讨论   
+```{r}
+titanic_data$Title<-gsub("(.*,)|(\\..*)","",titanic_data$Name) #利用正则表达式把姓名中的头衔分列出来
+rare<-names(which(table(titanic_data$Title)<10))#由于较少的头衔不具有代表性，所以将头衔个数小于10的筛选出来
+titanic_data$Title[titanic_data$Title %in% rare]<-"rare_title" #同一头衔个数小于10的，全部改为rare_title
+titanic_data$Title<-as.factor(titanic_data$Title) 
+summary(titanic_data$Title)
+```
+
+```{r}
+ggplot(titanic_data,mapping = aes(x=Title,y=after_stat(count),fill=Survived))+
+  geom_bar(stat = "count",position = "dodge")+
+  labs(title="The effect of Name(Title) on survival" ,x="Title",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position = position_dodge(0.9),vjust=0)
+```
+通过图可以发现，可以发现Name中Title为Miss和Mrs的幸存率更高，而Mr头衔的生存率更低只有15.67%，Master和rare_title生存率在50%左右
+
+(3).Sex对生存率的影响
+
+```{r}
+ggplot(titanic_data,mapping = aes(x=Sex,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of Sex on survival",x="Sex",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+```
+通过图可以发现，女性的生存率74.20%，而男性的生存率18.89%.说明女性的存活率比男性高。
+
+(4).Age对生存率的影响
+
+```{r}
+ggplot(titanic_data,mapping = aes(x=Age,y=after_stat(count),color=Survived))+
+    geom_line(aes(label=after_stat(count)), stat = 'bin', binwidth=3)  + 
+    labs(title = "The effect of Age on survival", x = "Age", y = "Count")
+```
+为了进一步验证，可以将其划分为未成年人和成年人：
+```{r}
+titanic_data$AgeState[titanic_data$Age<18]<-"Child"
+titanic_data$AgeState[titanic_data$Age>=18]<-"Adult"
+ggplot(titanic_data,mapping = aes(x=AgeState,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of AgeState on survival",x="AgeState",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+```
+通过图可以发现，未成年幸存率高于成年人。
+
+(5).SibSp和Parch对生存率的影响
+```{r}
+ggplot(titanic_data,mapping = aes(x=SibSp,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of Sibsp on survival",x="Sibsp",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+ggplot(titanic_data,mapping = aes(x=Parch,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of Parch on survival",x="Parch",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+```
+猜想家属个数与存活率相关，为了进一步验证建立新变量家属个数Familynum
+```{r}
+titanic_data$Familynum<-titanic_data$SibSp+titanic_data$Parch
+ggplot(titanic_data,mapping = aes(x=Familynum,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of Familynum on survival",x="Familynum",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+
+```
+合并后通过图可以发现家属个数有1-3个幸存率更高，家属个数为零或者大于3个的幸存率较低。
+
+
+(6).Ticket对生存率的影响
+由于船票号重复率低，所以研究使用共同船票和单独船票的乘客与生存率的关系
+
+```{r}
+ticket.count<-aggregate(titanic_data$Ticket,by=list(titanic_data$Ticket),function(x) sum(!is.na(x)))
+titanic_data$TicketCount <- apply(titanic_data, 1, function(x) ticket.count[which(ticket.count[, 1] == x['Ticket']), 2])
+titanic_data$TicketCount<-factor(sapply(titanic_data$TicketCount,function(x) ifelse(x>1,"share","unique")))
+ggplot(titanic_data,mapping = aes(x=TicketCount,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of TicketCount on survival",x="TicketCount",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+
+```
+通过图发现，使用共同船票的乘客的存活率52.03%，而单独票号的幸存率29.80%较低，说明使用共同船票的乘客存活率比使用单独船票的乘客更高
+
+(7).Fare对生存率的影响
+```{r}
+ggplot(titanic_data,aes(x=Fare,y=after_stat(count),color=Survived))+
+  geom_line(aes(label=after_stat(count)),stat = "bin",binwidth=5)+
+  ggtitle("The effect of Fare on survival")
+
+```
+通过图可以发现，购买船票的价格越高，幸存率越高。
+
+(7).Embarked对生存率的影响
+```{r}
+ggplot(titanic_data,mapping = aes(x=Embarked,y=after_stat(count),fill=Survived))+
+  geom_bar(stat="count",position = "dodge")+
+  labs(title="The effect of Embarked on survival",x="Embarked",y="count")+
+  geom_text(stat="count",aes(label=after_stat(count)),position =position_dodge(width = 0.9),vjust=0)
+```
+通过图可以发现，生存率分别为55.88%,38.96%,33.70%,在C(Cherbourg)港口上船的人，幸存率更高。
+
+四.数据建模及模型质量评估
+a.建⽴是否存活(Survived)的预测模型（Y：Survived）
+本次建模使用逻辑回归模型
+```{r}
+#选择特征用来建模
+cols_selected<-c("Survived","Pclass","Sex","Age","Fare","Embarked","AgeState","Familynum","TicketCount")
+
+
+train_data<-titanic_data[,colnames(titanic_data) %in% cols_selected]
+summary(train_data)
+
+
+#建模
+fit1=glm(Survived~.,data=train_data,family =binomial())
+
+summary(fit1)
+```
+
+```{r}
+#经过调整模型变量
+fit2=glm(Survived~Pclass+Sex+Age+Familynum+TicketCount,data=train_data,family =binomial())
+
+summary(fit2)
+
+```
+
+```{r}
+#30%的训练集数据用来验证模型
+set.seed(123)
+par <- createDataPartition(titanic_data$Survived,times = 1,p=0.3,list = F)
+test_data <- titanic_data[par,]
+#模型质量评估
+####预测准确率
+pred <- predict(fit2,test_data[1:nrow(test_data),],type = "response")
+fittedresults<-ifelse(pred>0.5,1,0); 
+Error<-sum(factor(fittedresults)!=test_data$Survived)/nrow(test_data)
+Error
+#计算模型系数的指数，即各变量的几率比。
+exp(coef(fit2))
+
+```
+
+通过模型发现舱位，性别，年龄，家属人数等均对生还率有影响。且预测错误率为18%左右，也就是说82%的记录均预测正确。
+其中舱位等级高，女性，年龄低，家属人数在1-3的乘客生还率高，更有可能存活下来
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

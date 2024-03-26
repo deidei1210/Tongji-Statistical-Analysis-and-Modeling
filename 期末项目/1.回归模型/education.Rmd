@@ -1,0 +1,366 @@
+---
+title: "教育数据分析"
+author: "2152190 李凌朗"
+output:
+  word_document: default
+  html_notebook: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+documentclass: ctexart
+encoding: UTF-8
+---
+一、导入数据
+```{r}
+# 导入必要的包
+library(ggplot2)
+library(caret)
+library(tidyverse)
+# 导入数据
+edu_data <- read.csv("education.csv")
+#设置随机种子
+set.seed(123)
+```
+
+二、数据预处理
+```{r}
+# 查找缺失值
+sapply(edu_data, function(x) sum(is.na(x)))
+# 查找空值
+sapply(edu_data, function(x) sum(x==""))
+summary(edu_data)
+```
+可以看出，表格中的数据并无缺失值与空值，但存在入学率超过100%的异常值以及大量数值为0的异常值。下一步对异常值进行处理。
+
+```{r}
+# 去除入学率超过100%异常值
+edu_data <- edu_data[edu_data$Gross_Primary_Education_Enrollment <= 100 & 
+  edu_data$Gross_Tertiary_Education_Enrollment <= edu_data$Gross_Primary_Education_Enrollment,]
+
+# 处理数值为0的异常值
+# 定义函数来处理每一列的零值
+replace_zero_with_mean <- function(column) {
+  mean_value <- mean(column[column != 0])  # 计算该列非零值的平均值
+  column[column == 0] <- mean_value  # 将为0的值替换为平均值
+  return(column)
+}
+
+# 对数据集除了地理坐标的每一列应用上述函数
+for (i in 4:29) {
+  edu_data[, i] <- replace_zero_with_mean(edu_data[, i])
+}
+
+summary(edu_data)
+```
+可以看出，异常值已经被处理完成。
+
+为了方便后续分析，我们假设每个国家或地区的男女比例为1：1，则该国家辍学率为男女辍学率均值，以此类推。
+```{r}
+# 后面操作均为计算平均值
+edu_data$Average_OOSR_Pre0Primary_Age <- (edu_data$OOSR_Pre0Primary_Age_Male +   edu_data$OOSR_Pre0Primary_Age_Female) / 2
+
+edu_data$Average_OOSR_Primary_Age <- (edu_data$OOSR_Primary_Age_Male +   edu_data$OOSR_Primary_Age_Female) / 2
+
+edu_data$Average_OOSR_Lower_Secondary_Age <- (edu_data$OOSR_Lower_Secondary_Age_Male +   edu_data$OOSR_Lower_Secondary_Age_Female) / 2
+
+edu_data$Average_OOSR_Upper_Secondary_Age <- (edu_data$OOSR_Upper_Secondary_Age_Male +   edu_data$OOSR_Upper_Secondary_Age_Female) / 2
+
+edu_data$Average_Completion_Rate_Primary <- (edu_data$Completion_Rate_Primary_Male +   edu_data$Completion_Rate_Primary_Female) / 2
+
+edu_data$Average_Completion_Rate_Primary <- (edu_data$Completion_Rate_Primary_Male +   edu_data$Completion_Rate_Primary_Female) / 2
+
+edu_data$Average_Completion_Rate_Lower_Secondary <- (edu_data$Completion_Rate_Lower_Secondary_Male +   edu_data$Completion_Rate_Lower_Secondary_Female) / 2
+
+edu_data$Average_Completion_Rate_Upper_Secondary <- (edu_data$Completion_Rate_Upper_Secondary_Male +   edu_data$Completion_Rate_Upper_Secondary_Female) / 2
+
+edu_data$Average_Youth_15_24_Literacy_Rate <- (edu_data$Youth_15_24_Literacy_Rate_Male +   edu_data$Youth_15_24_Literacy_Rate_Female) / 2
+
+#假设阅读能力和数学能力各占50分，则综合能力为二者均值
+edu_data$Average_Grade_2_3_Proficiency <- (edu_data$Grade_2_3_Proficiency_Reading +   edu_data$Grade_2_3_Proficiency_Math) / 2
+
+edu_data$Average_Primary_End_Proficiency <- (edu_data$Primary_End_Proficiency_Reading +   edu_data$Primary_End_Proficiency_Math) / 2
+
+edu_data$Average_Lower_Secondary_End_Proficiency <- (edu_data$Lower_Secondary_End_Proficiency_Reading + edu_data$Lower_Secondary_End_Proficiency_Math) / 2
+```
+
+三、数据分析及结论
+(1)性别对教育完成率的影响
+```{r}
+# 创建基础散点图函数
+plot_base <- function(data, x_var, y_var, title_text) {
+  ggplot(data, aes(x = !!sym(x_var), y = !!sym(y_var))) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+    labs(title = title_text,
+         x = x_var,
+         y = y_var)
+}
+
+# 依次创建男女生小学、初中、高中教育完成率散点图
+plot_base(edu_data, "Completion_Rate_Primary_Male", "Completion_Rate_Primary_Female", "男女生小学教育完成率")
+
+plot_base(edu_data, "Completion_Rate_Lower_Secondary_Male", "Completion_Rate_Lower_Secondary_Female", "男女生初中教育完成率")
+
+plot_base(edu_data, "Completion_Rate_Upper_Secondary_Male", "Completion_Rate_Upper_Secondary_Female", "男女生高中教育完成率")
+```
+图中的直线为y=x线，在直线下方的点表示男性教育完成率比女性高，在直线上方的点表示男性教育完成率比女性低。
+从图中我们可以看出，不同国家的男女性之间的教育完成率存在一定差别，男女性不同教育阶段的教育完成率整体上没有显著区别。
+
+(2)不同年龄段学生的阅读能力和数学能力差异分析
+```{r}
+# 创建基础散点图函数
+plot_base <- function(data, x_var, y_var, title_text) {
+  ggplot(data, aes(x = !!sym(x_var), y = !!sym(y_var))) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+    labs(title = title_text,
+         x = x_var,
+         y = y_var)
+}
+
+# 依次创建二三年级、小学、初中阅读和数学能力分析散点图
+plot_base(edu_data, "Grade_2_3_Proficiency_Reading", "Grade_2_3_Proficiency_Math", "二三年级阅读和数学能力")
+
+plot_base(edu_data, "Primary_End_Proficiency_Reading", "Primary_End_Proficiency_Math", "小学阅读和数学能力")
+
+plot_base(edu_data, "Lower_Secondary_End_Proficiency_Reading", "Lower_Secondary_End_Proficiency_Math", "初中阅读和数学能力")
+```
+图中的直线为y=x线，在直线下方的点表示阅读能力比数学能力高，在直线上方的点表示阅读能力比数学能力低。
+从图中我们可以看出，二三年级学生与小学学生的阅读和数学能力分化较严重，初中学生的阅读能力与数学能力发展逐渐平衡。
+
+（3）基础教育入学率对高等教育入学率的影响
+```{r}
+# 创建散点图
+ggplot(edu_data, aes(x = Gross_Primary_Education_Enrollment, y = Gross_Tertiary_Education_Enrollment)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + 
+  labs(title = "基础教育入学率与高等教育入学率关系",
+       x = "基础教育入学率",
+       y = "高等教育入学率")
+```
+可以看出基础教育入学率与高等教育入学率有一定的正相关性，基础教育入学率越高，高等教育入学率越高。
+
+（4）教育完成率对高等教育入学率的影响
+这里我们选取距离高等教育最近的高中教育完成率作为教育完成率的代表。
+```{r}
+# 绘制散点图分析高中教育完成率与高等教育入学率的关系
+ggplot(edu_data, aes(x = Average_Completion_Rate_Upper_Secondary, y = Gross_Tertiary_Education_Enrollment)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "高中教育完成率与高等教育入学率",
+       x = "高中教育完成率",
+       y = "高等教育入学率")
+```
+可以看出教育完成率与高等教育入学率有显著的正相关性，教育完成率越高，高等教育入学率越高。
+
+（5）辍学率对高等教育入学率的影响
+这里我们选取距离高等教育最近的高中辍学率作为辍学率的代表。
+```{r}
+# 绘制散点图分析高中辍学率与高等教育入学率的关系
+ggplot(edu_data, aes(x = Average_OOSR_Upper_Secondary_Age, y = Gross_Tertiary_Education_Enrollment)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "高中辍学率与高等教育入学率",
+       x = "高中辍学率",
+       y = "高等教育入学率")
+```
+可以看出辍学率与高等教育入学率有显著的负相关性，辍学率越高，高等教育入学率越低。
+
+（6）15-24岁学生读写能力对高等教育入学率的影响
+```{r}
+# 绘制散点图分析15-24岁学生读写能力与高等教育入学率的关系
+ggplot(edu_data, aes(x = Average_Youth_15_24_Literacy_Rate, y = Gross_Tertiary_Education_Enrollment)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "15-24岁学生读写能力与高等教育入学率",
+       x = "15-24岁学生读写能力",
+       y = "高等教育入学率")
+```
+可以看出15-24岁学生读写能力与高等教育入学率有一定的正相关性，15-24岁学生读写能力越高，高等教育入学率越高。
+
+（7）出生率对高等教育入学率的影响
+```{r}
+ggplot(edu_data, aes(x = Birth_Rate, y = Gross_Tertiary_Education_Enrollment)) +
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "出生率与高等教育入学率",
+       x = "出生率",
+       y = "高等教育入学率")
+```
+从图中可以显著看出二者存在负相关关系，出生率越高，高等教育入学率越低。
+
+（8）教育完成率对失业率的影响
+这里我们选取初中教育完成率作为教育完成率的代表。
+```{r}
+# 绘制散点图分析平均初中教育完成率与失业率的关系
+ggplot(edu_data, aes(x = Average_Completion_Rate_Lower_Secondary, y = Unemployment_Rate)) +
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "初中教育完成率与失业率",
+       x = "初中教育完成率",
+       y = "失业率")
+```
+可以看出二者存在一定的正相关关系，初中教育完成率越高，失业率越高
+
+（9）高等教育入学率对失业率的影响
+```{r}
+ggplot(edu_data, aes(x = Gross_Tertiary_Education_Enrollment, y = Unemployment_Rate)) +
+  geom_point() +  
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "高等教育入学率与失业率",
+       x = "高等教育入学率",
+       y = "失业率")
+```
+从图中可以看出，二者存在微弱的负相关关系，高等教育入学率越高，失业率越低。
+
+（10）辍学率对失业率的影响
+这里我们选取初中辍学率作为辍学率的代表。
+```{r}
+# 绘制散点图分析初中辍学率与失业率的关系
+ggplot(edu_data, aes(x = Average_OOSR_Lower_Secondary_Age, y = Unemployment_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "初中辍学率与失业率",
+       x = "初中辍学率",
+       y = "失业率")
+```
+从图中可以看出，二者存在微弱的负相关关系，初中辍学率越高，失业率越低。
+
+（11）15-24岁学生读写能力对失业率的影响
+```{r}
+ggplot(edu_data, aes(x = Average_Youth_15_24_Literacy_Rate, y = Unemployment_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "15-24岁学生读写能力与失业率",
+       x = "15-24岁学生读写能力",
+       y = "失业率")
+```
+从图中可以看出，线性回归线几乎为一条直线，15-24岁学生读写能力与失业率二者没有显著的线性相关性。
+
+（12）出生率对失业率的影响
+```{r}
+ggplot(edu_data, aes(x = Birth_Rate, y = Unemployment_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "出生率与失业率",
+       x = "出生率",
+       y = "失业率")
+```
+从图中可以看出，线性回归线几乎为一条直线，出生率与失业率二者没有显著的线性相关性
+
+（13）地理位置对失业率的影响
+使用散点图来展示地理位置与失业率的关系。
+```{r}
+ggplot(edu_data, aes(x = Longitude, y = Latitude)) +
+  geom_point(aes(size = Unemployment_Rate, color = Unemployment_Rate), alpha = 0.5) + 
+  scale_size_continuous(range = c(1, 8)) +  # 调整大小
+  scale_color_gradient(low = "white", high = "red") +  # 调整颜色
+  labs(title = "地理位置与失业率",
+       x = "经度",
+       y = "纬度",
+       size = "失业率",
+       color = "失业率") +
+  theme_minimal()
+```
+散点的大小与颜色表示失业率高低，散点越大，颜色越深，代表失业率越高；散点越小，颜色越浅，代表失业率越低。
+从图中可以看出，经度与纬度较低的国家或地区，失业率较高，失业率与地理位置有一定关系。下面单独对经度和纬度进行分析。
+首先是经度：
+```{r}
+ggplot(edu_data, aes(x = Longitude, y = Unemployment_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "经度与失业率",
+       x = "经度",
+       y = "失业率")
+```
+然后是纬度：
+```{r}
+ggplot(edu_data, aes(x = Latitude, y = Unemployment_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") + 
+  labs(title = "纬度与失业率",
+       x = "纬度",
+       y = "失业率")
+```
+可以看出，经度对失业率的影响较大，二者存在负相关关系；纬度对失业率几乎没有影响。
+
+四.数据建模及模型质量评估
+（1）建立⾼等教育总⼊学⼈数预测模型
+本次建模使用线性回归模型
+```{r}
+# 划分训练数据集以及测试数据集
+trainIndex1 <- createDataPartition(edu_data$Gross_Tertiary_Education_Enrollment, p = 0.8, list = FALSE)
+train_data1 <- edu_data[trainIndex1, ]
+test_data1 <- edu_data[-trainIndex1, ]
+
+# 初步建立线性回归模型
+model1 <- lm(Gross_Tertiary_Education_Enrollment ~ Latitude + Longitude +
+              Average_OOSR_Pre0Primary_Age + Average_OOSR_Primary_Age + 
+              Average_OOSR_Lower_Secondary_Age + Average_OOSR_Upper_Secondary_Age + 
+              Gross_Primary_Education_Enrollment + Average_Completion_Rate_Primary +
+              Average_Completion_Rate_Lower_Secondary + Average_Completion_Rate_Upper_Secondary +
+              Average_Youth_15_24_Literacy_Rate + Birth_Rate, 
+            data = train_data1)
+
+summary(model1)
+
+#筛选变量、优化模型
+model2 <- lm(Gross_Tertiary_Education_Enrollment ~ Latitude + Longitude +
+              Average_OOSR_Upper_Secondary_Age + Average_Completion_Rate_Lower_Secondary +
+              Average_Completion_Rate_Upper_Secondary + Birth_Rate +
+              Average_Youth_15_24_Literacy_Rate, 
+            data = train_data1)
+
+summary(model2)
+
+# 使用测试集进行预测
+predictions1 <- predict(model2, test_data1)
+
+# 绘制残差图
+plot(model2$residuals)
+abline(h = 0, col = "red")
+
+# 计算均方根误差 
+test_error1 <- sqrt(mean((test_data1$Gross_Tertiary_Education_Enrollment - predictions1)^2))
+print(test_error1)
+```
+从残差图中我们可以看到，大部分点随机分布在0周围，没有明显的趋势，且计算得出的均方根误差为11.5801，R平方为0.7664。考虑到高等教育入学率的取值范围，该模型的预测效果较好。
+
+（2）建立失业率预测模型
+本次建模使用线性回归模型
+```{r}
+# 划分训练数据集以及测试数据集
+trainIndex2 <- createDataPartition(edu_data$Unemployment_Rate, p = 0.8, list = FALSE)
+train_data2 <- edu_data[trainIndex2, ]
+test_data2 <- edu_data[-trainIndex2, ]
+
+# 初步建立线性回归模型
+model3 <- lm(Unemployment_Rate ~ Longitude + Average_OOSR_Pre0Primary_Age +
+              Average_OOSR_Primary_Age + Average_OOSR_Lower_Secondary_Age + 
+              Average_OOSR_Upper_Secondary_Age + Average_Completion_Rate_Primary +
+              Average_Completion_Rate_Lower_Secondary + Average_Completion_Rate_Upper_Secondary,
+            data = train_data2)
+
+summary(model3)
+
+#筛选变量、优化模型
+model4 <- lm(Unemployment_Rate ~ Average_OOSR_Pre0Primary_Age + Average_OOSR_Lower_Secondary_Age +
+              Average_Completion_Rate_Primary + Average_Completion_Rate_Lower_Secondary + 
+              Average_Completion_Rate_Upper_Secondary, 
+            data = train_data2)
+
+summary(model4)
+
+# 使用测试集进行预测
+predictions2 <- predict(model4, test_data2)
+
+# 绘制残差图
+plot(model4$residuals)
+abline(h = 0, col = "red")
+
+# 计算均方根误差
+test_error2 <- sqrt(mean((test_data2$Unemployment_Rate - predictions2)^2))
+print(test_error2)
+```
+从残差图中可以看到，点偏离较严重。计算得出的均方根误差为2.9881，R平方为0.3579。考虑到失业率的取值范围，该模型的预测效果较差。出现这种现象原因可能是这里仅仅使用了教育因素对失业率进行建模，而实际的失业率不仅受教育因素影响，还会受到经济、社会等因素的影响，因此只使用教育因素进行建模的模型的解释力较差。
+
